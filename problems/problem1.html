@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>CPSC 487/587</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/10.3.0/math.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quaternion@1.5.1/quaternion.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/numeric@1.2.6/numeric-1.2.6.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stats.js@0.17.0/build/stats.min.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+              "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+              "three/": "https://unpkg.com/three@0.160.0/"
+            }
+        }
+    </script>
+</head>
+<body>
+<script type="module">
+    import {ThreeEngine, get_default_lil_gui, refresh_displays} from "../js/utils/utils_three.js";
+    const engine = ThreeEngine.new_default_3d();
+    let gui = get_default_lil_gui();
+
+    let settings1 = {
+        r_x: 0.0,
+        r_y: 0.0,
+        r_z: 0.0,
+        t_x: 0.0,
+        t_y: 0.0,
+        t_z: 0.0
+    };
+    let settings2 = {
+        r_x: 0.0,
+        r_y: 0.0,
+        r_z: 0.0,
+        t_x: 0.0,
+        t_y: 0.0,
+        t_z: 0.0
+    };
+    let distance = {
+        distance: 0.0
+    };
+    
+    gui.add(settings1, 'r_x', -Math.PI, Math.PI).name('rotation_x 1');
+    gui.add(settings1, 'r_y', -Math.PI, Math.PI).name('rotation_y 1');
+    gui.add(settings1, 'r_z', -Math.PI, Math.PI).name('rotation_z 1');
+    gui.add(settings1, 't_x', -2.0, 2.0).name('translation_x 1');
+    gui.add(settings1, 't_y', -2.0, 2.0).name('translation_y 1');
+    gui.add(settings1, 't_z', -2.0, 2.0).name('translation_z 1');
+
+    gui.add(settings2, 'r_x', -Math.PI, Math.PI).name('rotation_x 2');
+    gui.add(settings2, 'r_y', -Math.PI, Math.PI).name('rotation_y 2');
+    gui.add(settings2, 'r_z', -Math.PI, Math.PI).name('rotation_z 2');
+    gui.add(settings2, 't_x', -2.0, 2.0).name('translation_x 2');
+    gui.add(settings2, 't_y', -2.0, 2.0).name('translation_y 2');
+    gui.add(settings2, 't_z', -2.0, 2.0).name('translation_z 2');
+
+    gui.add(distance, 'distance').name('SE(3) Distance');
+
+    function se3matrix(r_x, r_y, r_z, t_x, t_y, t_z){
+        return [[Math.cos(r_y)*Math.cos(r_z), -Math.cos(r_x)*Math.sin(r_z), Math.sin(r_x)*Math.sin(r_y), t_x],
+                [Math.cos(r_z)*Math.sin(r_x)*Math.sin(r_y) + Math.cos(r_x)*Math.sin(r_z), Math.cos(r_x)*Math.cos(r_z) - Math.sin(r_x)*Math.sin(r_y)*Math.sin(r_z), -Math.cos(r_y)*Math.sin(r_x), t_y],
+                [-Math.cos(r_x)*Math.cos(r_z)*Math.sin(r_y) + Math.sin(r_x)*Math.sin(r_z), Math.cos(r_z)*Math.sin(r_x) + Math.cos(r_x)*Math.sin(r_y)*Math.sin(r_z), Math.cos(r_x)*Math.cos(r_y), t_z],
+                [0, 0, 0, 1]];
+    }
+    function se3transform(point, r_x, r_y, r_z, t_x, t_y, t_z){
+        let R = se3matrix(r_x, r_y, r_z, t_x, t_y, t_z);
+        let x = point[0];
+        let y = point[1];
+        let z = point[2];
+        let new_x = R[0][0]*x + R[0][1]*y + R[0][2]*z + R[0][3];
+        let new_y = R[1][0]*x + R[1][1]*y + R[1][2]*z + R[1][3];
+        let new_z = R[2][0]*x + R[2][1]*y + R[2][2]*z + R[2][3];
+        return [new_x, new_y, new_z];
+    }
+    function se3inverse(M){
+        let R = [[M[0][0], M[0][1], M[0][2]],
+                 [M[1][0], M[1][1], M[1][2]],
+                 [M[2][0], M[2][1], M[2][2]]];
+        let T = [[M[0][3]], [M[1][3]], [M[2][3]]];
+        let R_t = math.transpose(R);
+        let R_t_t = math.multiply(-1, math.multiply(R_t, T));
+        let M_inv = [[R_t[0][0], R_t[0][1], R_t[0][2], R_t_t[0][0]],
+                 [R_t[1][0], R_t[1][1], R_t[1][2], R_t_t[1][0]],
+                 [R_t[2][0], R_t[2][1], R_t[2][2], R_t_t[2][0]],
+                 [0, 0, 0, 1]];
+        return M_inv;
+    }
+    function so3logarithm(R){
+        let trace = R[0][0] + R[1][1] + R[2][2];
+        let beta = Math.acos((trace - 1) / 2);
+        let coeff;
+        if(Math.abs(beta) < 1e-6){
+            coeff = 0.5+beta**2/12+7*beta**4/720;
+            return math.multiply(coeff, (math.subtract(R, math.transpose(R))));
+        }
+        else if(Math.abs(beta - Math.PI) < 1e-6){
+            return [
+                [0, -Math.PI*Math.sqrt(0.5*(R[2][2]+1)), Math.PI*Math.sqrt(0.5*(R[1][1]+1))],
+                [Math.PI*Math.sqrt(0.5*(R[2][2]+1)), 0, -Math.PI*Math.sqrt(0.5*(R[0][0]+1))],
+                [-Math.PI*Math.sqrt(0.5*(R[1][1]+1)), Math.PI*Math.sqrt(0.5*(R[0][0]+1)), 0]
+            ];
+        }
+        else{
+            coeff = beta/(2*Math.sin(beta));
+            return math.multiply(coeff, (math.subtract(R, math.transpose(R))));
+        }
+    }
+    function fullse3logarithm(M){
+        let R = [[M[0][0], M[0][1], M[0][2]],
+                 [M[1][0], M[1][1], M[1][2]],
+                 [M[2][0], M[2][1], M[2][2]]];
+        let T = [[M[0][3]], [M[1][3]], [M[2][3]]];
+        let A = so3logarithm(R);
+        let I = [[1,0,0],[0,1,0],[0,0,1]];
+        let u = [-A[1][2], A[0][2], -A[0][1]];
+        let beta = math.norm(u);
+        let p, q;
+        if(Math.abs(beta) < 1e-6){
+            p = 0.5-beta**2/24+beta**4/720;
+            q = 1/6-beta**2/120+beta**4/5040;
+        }
+        else{
+            p = (1 - Math.cos(beta)) / (beta**2);
+            q = (beta - Math.sin(beta)) / (beta**3);
+        }
+        let C = math.add(I, math.multiply(p, A), math.multiply(q, math.multiply(A, A)));
+        let v = math.multiply(matrix_inverse_3x3(C), T);
+        return [[A[0][0], A[0][1], A[0][2], v[0][0]],
+                [A[1][0], A[1][1], A[1][2], v[1][0]],
+                [A[2][0], A[2][1], A[2][2], v[2][0]],
+                [0, 0, 0, 0]];
+    }
+    function vee_se3(M){
+        return [
+            M[2][1],
+            M[0][2],
+            M[1][0],
+            M[0][3],
+            M[1][3],
+            M[2][3]
+        ];
+    }
+    function dispdist(r_x1, r_y1, r_z1, t_x1, t_y1, t_z1, r_x2, r_y2, r_z2, t_x2, t_y2, t_z2){
+        let inv1 = se3inverse(se3matrix(r_x1, r_y1, r_z1, t_x1, t_y1, t_z1));
+        let disp = math.multiply(inv1, se3matrix(r_x2, r_y2, r_z2, t_x2, t_y2, t_z2));
+        let ln = vee_se3(fullse3logarithm(disp));
+        return math.norm(ln);
+    }
+    // todo: create a visualization that demonstrates your knowledge of displacement-based
+    // todo: distance over SE(3).  Note that this will use your logarithm solution from PS_U3,
+    // todo: so you must finish that prior to starting this problem.
+    // todo: Feel free to make this visualization as creative as you want, or, conversely,
+    // todo: feel free to create a visualization like the one here
+    // todo: https://yale-cpsc-487-587-internal-djrakita-c95fa6c3239a481a48d29a6b0fd.gitlab.io/html/visualizations/SE2_distance2.html
+    // todo: though applied to 3D rotations + translations instead of 2D rotations + translations.
+    // todo: Feel free to use the 3x3 matrix inverse function provided by me below if you want.
+
+    // A must be a 3x3 matrix in row major order
+    // [[a11, a12, a13], [a21, a22, a23], [a31, a32, a33]]
+
+    function matrix_inverse_3x3(A) {
+        let det = A[0][0] * (A[1][1] * A[2][2] - A[2][1] * A[1][2]) -
+            A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0]) +
+            A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]);
+
+        if (det === 0) {
+            return null; // No inverse exists if determinant is 0
+        }
+
+        let cofactors = [
+            [
+                (A[1][1] * A[2][2] - A[2][1] * A[1][2]),
+                -(A[1][0] * A[2][2] - A[1][2] * A[2][0]),
+                (A[1][0] * A[2][1] - A[2][0] * A[1][1])
+            ],
+            [
+                -(A[0][1] * A[2][2] - A[0][2] * A[2][1]),
+                (A[0][0] * A[2][2] - A[0][2] * A[2][0]),
+                -(A[0][0] * A[2][1] - A[2][0] * A[0][1])
+            ],
+            [
+                (A[0][1] * A[1][2] - A[0][2] * A[1][1]),
+                -(A[0][0] * A[1][2] - A[1][0] * A[0][2]),
+                (A[0][0] * A[1][1] - A[1][0] * A[0][1])
+            ]
+        ];
+
+        let adjugate = [
+            [cofactors[0][0] / det, cofactors[1][0] / det, cofactors[2][0] / det],
+            [cofactors[0][1] / det, cofactors[1][1] / det, cofactors[2][1] / det],
+            [cofactors[0][2] / det, cofactors[1][2] / det, cofactors[2][2] / det]
+        ];
+
+        return adjugate;
+
+    }
+
+    engine.animation_loop(() => {
+        let first_new_point1 = se3transform([0,1,0], settings1.r_x, settings1.r_y, settings1.r_z, settings1.t_x, settings1.t_y, settings1.t_z);
+        let first_new_point2 = se3transform([1,0,0], settings1.r_x, settings1.r_y, settings1.r_z, settings1.t_x, settings1.t_y, settings1.t_z);
+        let first_new_point3 = se3transform([0,0,1], settings1.r_x, settings1.r_y, settings1.r_z, settings1.t_x, settings1.t_y, settings1.t_z);
+        let first_new_origin = se3transform([0,0,0], settings1.r_x, settings1.r_y, settings1.r_z, settings1.t_x, settings1.t_y, settings1.t_z);
+
+        let second_new_point1 = se3transform([0,1,0], settings2.r_x, settings2.r_y, settings2.r_z, settings2.t_x, settings2.t_y, settings2.t_z);
+        let second_new_point2 = se3transform([1,0,0], settings2.r_x, settings2.r_y, settings2.r_z, settings2.t_x, settings2.t_y, settings2.t_z);
+        let second_new_point3 = se3transform([0,0,1], settings2.r_x, settings2.r_y, settings2.r_z, settings2.t_x, settings2.t_y, settings2.t_z);
+        let second_new_origin = se3transform([0,0,0], settings2.r_x, settings2.r_y, settings2.r_z, settings2.t_x, settings2.t_y, settings2.t_z);
+
+        engine.draw_debug_vector(first_new_origin, first_new_point1, 0.01, 0.15, 0x66FF00, 1.0);
+        engine.draw_debug_vector(first_new_origin, first_new_point2, 0.01, 0.15, 0xFF66FF, 1.0);
+        engine.draw_debug_vector(first_new_origin, first_new_point3, 0.01, 0.15, 0x66FFFF, 1.0);
+
+        engine.draw_debug_vector(second_new_origin, second_new_point1, 0.01, 0.15, 0x66FFFF, 1.0);
+        engine.draw_debug_vector(second_new_origin, second_new_point2, 0.01, 0.15, 0xFF0000, 1.0);
+        engine.draw_debug_vector(second_new_origin, second_new_point3, 0.01, 0.15, 0xFF66FF, 1.0);
+
+        distance.distance = dispdist(settings1.r_x, settings1.r_y, settings1.r_z, settings1.t_x, settings1.t_y, settings1.t_z, settings2.r_x, settings2.r_y, settings2.r_z, settings2.t_x, settings2.t_y, settings2.t_z);
+        refresh_displays(gui);
+    });
+
+</script>
+</body>
+</html>

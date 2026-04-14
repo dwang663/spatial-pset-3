@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>CPSC 487/587</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/10.3.0/math.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quaternion@1.5.1/quaternion.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/numeric@1.2.6/numeric-1.2.6.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stats.js@0.17.0/build/stats.min.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+              "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+              "three/": "https://unpkg.com/three@0.160.0/"
+            }
+        }
+    </script>
+</head>
+<body>
+<script type="module">
+    import {get_default_lil_gui, ThreeEngine, refresh_displays} from "../js/utils/utils_three.js";
+    const engine = ThreeEngine.new_default_3d();
+    let gui = get_default_lil_gui();
+
+    let settings = {
+        w: 0.0,
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        size: 0.04
+    }
+    gui.add(settings, 'w', -2.0, 2.0).name('w');
+    gui.add(settings, 'x', -2.0, 2.0).name('x');
+    gui.add(settings, 'y', -2.0, 2.0).name('y');
+    gui.add(settings, 'z', -2.0, 2.0).name('z');
+    gui.add(settings, 'size', 0.01, 0.1).name('size');
+
+    engine.animation_loop(() => {
+        let origin = [0,0,0];
+        let head = [settings.x, settings.y, settings.z];
+        let tip = [settings.x, settings.y, settings.z+settings.w];
+        let rev_tip = [settings.x, settings.y, settings.z-settings.w];
+        engine.draw_debug_vector(origin, head, 0.01, 0.15, 0xff0000);
+        engine.draw_debug_vector(head, tip, 0.01, 0.1, 0x00ff00);
+        engine.draw_debug_vector(head, rev_tip, 0.01, 0.1, 0x0000ff);
+        engine.draw_debug_sphere(tip, 0.05, 0xff0000);
+    });
+
+
+    // todo: create a visualization that demonstrates your knowledge of quaternions.  This is intentionally
+    // todo: open-ended.  Be as creative as you want, or feel free to recreate any of the visualizations
+    // todo: found in Section 3.3.
+
+</script>
+</body>
+</html>
